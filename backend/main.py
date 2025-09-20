@@ -1,11 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+from services.spotify_service import get_access_token
+from services.spotify_service import get_top_tracks
+from services.spotify_service import check_spotify_status
+from models.fastapi_models import SpotifyStatusResponse, SpotifyCallbackResponse, TopTracksResponse
 
 # Create FastAPI instance
 app = FastAPI(
@@ -33,15 +32,40 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "isoca-spot-api"}
 
-@app.get("/api/spotify/status")
-async def spotify_status():
+@app.get("/api/spotify/status", response_model=SpotifyStatusResponse)
+async def spotify_status(access_token: str = None):
     """Check Spotify API connection status"""
-    # TODO: Implement actual Spotify API connection check
-    return {
-        "spotify_connected": False,
-        "message": "Spotify integration not yet implemented",
-        "next_steps": "Configure Spotify API credentials"
-    }
+    if access_token:
+        connected, message = check_spotify_status(access_token)
+        return {
+            "spotify_connected": connected,
+            "message": message,
+            "next_steps": "Provide a valid access token if not connected."
+        }
+    else:
+        return {
+            "spotify_connected": False,
+            "message": "No access token provided.",
+            "next_steps": "Authenticate with Spotify to obtain an access token."
+        }
+
+
+@app.get("/api/spotify/callback", response_model=SpotifyCallbackResponse)
+async def spotify_callback(request: Request):
+    code = request.query_params.get("code")
+    access_token = get_access_token(code)
+    return {"access_token": access_token, "message": "Spotify authentication successful"}
+
+
+@app.get("/api/spotify/top-tracks", response_model=TopTracksResponse)
+async def top_tracks(access_token: str):
+    try:
+        tracks = get_top_tracks(access_token)
+        # Convert tracks to Track models if needed
+        return {"top_tracks": tracks}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn
