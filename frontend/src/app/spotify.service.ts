@@ -23,14 +23,6 @@ export class SpotifyService {
 
   constructor(private http: HttpClient) {}
 
-  getStatus(accessToken?: string): Observable<SpotifyStatusResponse> {
-    let params = new HttpParams();
-    if (accessToken) {
-      params = params.set('access_token', accessToken);
-    }
-    return this.http.get<SpotifyStatusResponse>(`${this.apiUrl}/status`, { params });
-  }
-
   callback(code: string): Observable<SpotifyCallbackResponse> {
     const params = new HttpParams().set('code', code);
     return this.http.get<SpotifyCallbackResponse>(`${this.apiUrl}/callback`, { params });

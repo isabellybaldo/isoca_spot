@@ -201,19 +201,22 @@
   <span style="font-size: 1.125rem; color: var(--gray-700); font-weight: 400; margin-bottom: 0.5rem;">
     Your gateway to Spotify insights
   </span>
-  @if (!accessToken && !(topTracks?.length)) {
+  @if (!accessToken() && !(topTracks().length)) {
     <button class="button" style="margin-top:1.5rem; align-self: center;" (click)="startSpotifyAuth()">
       <svg style="height:1.2em;width:1.2em;vertical-align:middle;margin-right:0.5em;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1DB954"/><path d="M17.5 9.5c-2.5-1-6.5-1-9 0-.5.2-.7.7-.5 1.2.2.5.7.7 1.2.5 2-1 5.5-1 7.5 0 .5.2 1-.1 1.2-.5.2-.5-.1-1-.4-1.2zm-.7 2.7c-2.1-.8-5.5-.8-7.6 0-.4.2-.6.7-.4 1.1.2.4.7.6 1.1.4 1.7-.7 4.6-.7 6.3 0 .4.2.9 0 1.1-.4.2-.4 0-.9-.5-1.1zm-7.8 2.6c-.3.2-.4.7-.2 1 .2.3.7.4 1 .2 1.4-.6 3.7-.6 5.1 0 .3.2.8.1 1-.2.2-.3.1-.8-.2-1-1.7-.7-4.2-.7-5.7 0z" fill="#fff"/></svg>
       Connect to Spotify
     </button>
   }
-  @if (isLoadingTopTracks && !(topTracks.length)) {
+  @if (isLoadingTopTracks() && !(topTracks().length)) {
   <span style="font-size:1rem;color:var(--gray-700);margin-top:1.5rem;">Loading your top songs…</span>
   }
-  @else if (accessToken && (topTracks.length) > 0) {
+  @if (errorMessage()) {
+    <span style="font-size:0.95rem;color:#d22;margin-top:1rem;">{{ errorMessage() }}</span>
+  }
+  @else if (accessToken() && (topTracks().length) > 0) {
     <span style="font-size: 1.125rem; color: var(--gray-700); font-weight: 400; margin-top: 1.5rem;">Here are your top songs:</span>
     <div style="margin-top:2rem; width:100%; max-width:700px; display:flex; flex-direction:column; gap:1.5rem; justify-content:center; align-items:center;">
-      @for (song of topTracks; track song.name) {
+      @for (song of topTracks(); track song.spotify_link) {
         <div style="background:var(--gray-400); border-radius:1rem; padding:1.25rem 1.5rem; min-width:220px; max-width:320px; min-height:220px; box-shadow:0 2px 8px rgba(0,0,0,0.07); display:flex; flex-direction:column; justify-content:space-between; align-items:center;">
           <img src="{{ song.image_url }}" alt="Album cover" style="width:64px;height:64px;border-radius:0.5rem;margin-bottom:0.75rem;display:block;" />
           <div style="font-size:1.1rem; font-weight:600; color:var(--gray-900); margin-bottom:0.5rem; text-align:center;">
@@ -240,8 +243,8 @@
       }
     </div>
   }
-  @else if (accessToken && !isLoadingTopTracks) {
-  <span>No songs found.</span>
+  @else if (accessToken() && !isLoadingTopTracks() && !topTracks().length && !errorMessage()) {
+    <span>No songs found.</span>
   }
 </header>
 <hr class="divider" />

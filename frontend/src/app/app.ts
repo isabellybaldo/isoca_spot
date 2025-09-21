@@ -1,8 +1,18 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, effect } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { finalize } from 'rxjs/operators';
-import { SpotifyService } from './spotify.service';
+import { SpotifyService, SpotifyCallbackResponse, TopTracksResponse } from './spotify.service';
 import { SPOTIFY_CLIENT_ID } from './app.config';
+
+// Define Track interface before the component decorator so decorator applies to class properly
+export interface Track {
+  name: string;
+  artists: string[];
+  popularity: number;
+  genres: string[];
+  spotify_link: string;
+  image_url: string | null;
+}
 
 @Component({
   selector: 'app-root',
@@ -14,9 +24,11 @@ import { SPOTIFY_CLIENT_ID } from './app.config';
 export class App {
   protected readonly title = signal('Isoca Spot');
 
-  accessToken: string | null = null;
-  topTracks: any[] = [];
-  isLoadingTopTracks = false;
+  // Reactive state as signals (zoneless friendly)
+  accessToken = signal<string | null>(null);
+  topTracks = signal<Track[]>([]);
+  isLoadingTopTracks = signal(false);
+  errorMessage = signal<string | null>(null);
 
   constructor(private spotifyService: SpotifyService) {
     const code = this.getSpotifyCodeFromUrl();
@@ -24,33 +36,37 @@ export class App {
 
     if (code) {
       this.spotifyService.callback(code).subscribe({
-        next: (response: any) => {
-          this.accessToken = response.access_token;
-          // coerce null-safe
-          localStorage.setItem(
-            'spotify_access_token',
-            this.accessToken ?? ''
-          );
-          this.getTopTracks();
+        next: (response: SpotifyCallbackResponse) => {
+          this.accessToken.set(response.access_token || null);
+          localStorage.setItem('spotify_access_token', this.accessToken() ?? '');
           this.clearSpotifyCodeFromUrl();
         },
         error: () => {
-          this.accessToken = null;
+          this.accessToken.set(null);
           localStorage.removeItem('spotify_access_token');
           this.clearSpotifyCodeFromUrl();
         }
       });
     } else if (storedToken) {
-      this.accessToken = storedToken;
-      this.getTopTracks();
+      this.accessToken.set(storedToken);
     } else {
       console.log('No Spotify code or token found in URL or localStorage.');
     }
 
-    // keep token in sync across tabs
-    window.addEventListener('storage', (e) => {
+    // Keep token in sync across tabs
+    window.addEventListener('storage', (e: StorageEvent) => {
       if (e.key === 'spotify_access_token') {
-        this.accessToken = e.newValue;
+        this.accessToken.set(e.newValue);
+      }
+    });
+
+    // Reactively load tracks when token becomes available
+    effect(() => {
+      const token = this.accessToken();
+      if (token) {
+        this.loadTopTracks();
+      } else {
+        this.topTracks.set([]);
       }
     });
   }
@@ -60,33 +76,46 @@ export class App {
     return params.get('code');
   }
 
-  private clearSpotifyCodeFromUrl() {
-    window.history.replaceState({}, document.title, '/');
+  private clearSpotifyCodeFromUrl(): void {
+    // Preserve current pathname instead of forcing root
+    const basePath = window.location.pathname.split('?')[0];
+    window.history.replaceState({}, document.title, basePath || '/');
   }
 
-  getTopTracks() {
-    if (!this.accessToken) return;
+  private loadTopTracks(): void {
+    const token = this.accessToken();
+    if (!token) return;
 
-    this.isLoadingTopTracks = true;
+    this.isLoadingTopTracks.set(true);
+    this.errorMessage.set(null);
     this.spotifyService
-      .getTopTracks(this.accessToken)
-      .pipe(finalize(() => (this.isLoadingTopTracks = false)))
+      .getTopTracks(token)
+      .pipe(finalize(() => this.isLoadingTopTracks.set(false)))
       .subscribe({
-        next: (res: any) => {
-          this.topTracks = Array.isArray(res?.top_tracks) ? res.top_tracks : [];
-          console.log('Tracks loaded:', this.topTracks.length);
+        next: (res: TopTracksResponse) => {
+          const list = Array.isArray(res?.top_tracks) ? (res.top_tracks as Track[]) : [];
+          this.topTracks.set(list);
+          console.log('Tracks loaded:', list.length);
         },
         error: (err: any) => {
           console.error('getTopTracks failed', err);
-          this.topTracks = [];
+          if (err?.status === 401) {
+            // Token likely expired; clear and prompt re-auth.
+            localStorage.removeItem('spotify_access_token');
+            this.accessToken.set(null);
+          }
+          this.topTracks.set([]);
+          this.errorMessage.set('Failed to load top tracks. Please try again.');
         }
       });
   }
 
-  startSpotifyAuth() {
+  startSpotifyAuth(): void {
     const clientId = SPOTIFY_CLIENT_ID;
-    const redirectUri = encodeURIComponent('http://localhost:4200/callback');
+    // Use the /callback path so Spotify redirects back to the frontend callback handler
+    const redirectUri = encodeURIComponent(window.location.origin + '/callback');
     const scopes = encodeURIComponent('user-top-read');
+    // NOTE: For production add state & PKCE. Omitted here for brevity.
     const authUrl =
       `https://accounts.spotify.com/authorize` +
       `?response_type=code` +
