@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Query
+import logging
 
 from services.spotify_service import get_access_token
 from services.spotify_service import get_top_tracks
@@ -13,14 +15,22 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Configure CORS - only allow the frontend origins explicitly so headers are applied correctly
+FRONTEND_ORIGINS = [
+    "http://localhost:4200",
+    "http://127.0.0.1:4200",
+]
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific frontend URL
+    allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 @app.get("/")
 async def root():
@@ -51,10 +61,22 @@ async def spotify_status(access_token: str = None):
 
 
 @app.get("/api/spotify/callback", response_model=SpotifyCallbackResponse)
-async def spotify_callback(request: Request):
-    code = request.query_params.get("code")
-    access_token = get_access_token(code)
-    return {"access_token": access_token, "message": "Spotify authentication successful"}
+async def spotify_callback(code: str = Query(None)):
+    """Exchange authorization code for an access token."""
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing 'code' query parameter")
+
+    try:
+        access_token = get_access_token(code)
+        if not access_token:
+            raise HTTPException(status_code=500, detail="Failed to obtain access token from Spotify")
+        return {"access_token": access_token, "message": "Spotify authentication successful"}
+    except HTTPException:
+        # re-raise HTTPExceptions from above
+        raise
+    except Exception as e:
+        logger.exception("Error handling spotify callback")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/spotify/top-tracks", response_model=TopTracksResponse)
@@ -64,6 +86,7 @@ async def top_tracks(access_token: str):
         # Convert tracks to Track models if needed
         return {"top_tracks": tracks}
     except Exception as e:
+        logger.exception("Error fetching top tracks")
         raise HTTPException(status_code=400, detail=str(e))
 
 

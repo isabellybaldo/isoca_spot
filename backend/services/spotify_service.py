@@ -42,11 +42,16 @@ def get_top_tracks(access_token):
         genres = []
         for artist in track["artists"]:
             genres.extend(artist_genre_map.get(artist["id"], []))
+        # Get Spotify link and smallest image
+        spotify_link = track["external_urls"]["spotify"]
+        smallest_image_url = track["album"]["images"][-1]["url"] if track["album"].get("images") else None
         tracks.append({
             "name": track["name"],
             "artists": [artist["name"] for artist in track["artists"]],
             "popularity": track["popularity"],
-            "genres": list(set(genres))  # Remove duplicates
+            "genres": list(set(genres)),  # Remove duplicates
+            "spotify_link": spotify_link,
+            "image_url": smallest_image_url
         })
     return tracks
 
