@@ -17,6 +17,8 @@ class Track(BaseModel):
     artists: list
     popularity: int
     genres: list
+    spotify_link: str
+    image_url: str
 
 
 class TopTracksResponse(BaseModel):

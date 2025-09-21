@@ -201,3 +201,4 @@ cython_debug/
 /.angular/cache
 .sass-cache/
 /connect.lock
+frontend/.angular
